@@ -1,0 +1,13 @@
+[Unit]
+Description=Eaton PDU exporter for Prometheus
+Documentation=https://github.com/ubccr/eaton_exporter
+After=network.target
+
+[Service]
+Restart=always
+User=prometheus
+Group=prometheus
+ExecStart=/usr/local/bin/eaton_exporter --config.file=/etc/prometheus/eaton.conf
+
+[Install]
+WantedBy=multi-user.target

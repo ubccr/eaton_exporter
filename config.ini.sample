@@ -1,0 +1,4 @@
+[connection:pdu1_name]
+host=pdu1_name
+username=admin
+password=admin
