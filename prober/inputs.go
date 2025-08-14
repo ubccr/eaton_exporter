@@ -50,49 +50,49 @@ type InputProber struct {
 	} `json:"phases"`
 
 	phases         []*Phase
-	powerGuage     prometheus.Gauge
-	statusGuage    *prometheus.GaugeVec
-	phaseVoltGuage *prometheus.GaugeVec
-	phaseAmpGuage  *prometheus.GaugeVec
-	phaseLoadGuage *prometheus.GaugeVec
+	powerGauge     prometheus.Gauge
+	statusGauge    *prometheus.GaugeVec
+	phaseVoltGauge *prometheus.GaugeVec
+	phaseAmpGauge  *prometheus.GaugeVec
+	phaseLoadGauge *prometheus.GaugeVec
 	ec             *client.Client
 }
 
 func (p *InputProber) Register(registry *prometheus.Registry) {
-	p.powerGuage = prometheus.NewGauge(prometheus.GaugeOpts{
+	p.powerGauge = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "eaton_pdu_active_power",
 		Help: "PDU active power (W)",
 	})
 
-	registry.MustRegister(p.powerGuage)
+	registry.MustRegister(p.powerGauge)
 
-	p.statusGuage = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	p.statusGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "eaton_pdu_input_status",
 		Help: "PDU input status",
 	}, []string{"operating"})
 
-	registry.MustRegister(p.statusGuage)
+	registry.MustRegister(p.statusGauge)
 
-	p.phaseLoadGuage = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	p.phaseLoadGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "eaton_pdu_phase_percent_load",
 		Help: "PDU phase percent load (%)",
 	}, []string{"phase"})
 
-	registry.MustRegister(p.phaseLoadGuage)
+	registry.MustRegister(p.phaseLoadGauge)
 
-	p.phaseVoltGuage = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	p.phaseVoltGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "eaton_pdu_phase_voltage_ll",
 		Help: "PDU phase voltageLL (V)",
 	}, []string{"phase"})
 
-	registry.MustRegister(p.phaseVoltGuage)
+	registry.MustRegister(p.phaseVoltGauge)
 
-	p.phaseAmpGuage = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	p.phaseAmpGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "eaton_pdu_phase_current",
 		Help: "PDU phase current (A)",
 	}, []string{"phase"})
 
-	registry.MustRegister(p.phaseAmpGuage)
+	registry.MustRegister(p.phaseAmpGauge)
 }
 
 func (p *InputProber) Fetch(logger *slog.Logger) error {
@@ -144,17 +144,17 @@ func (p *InputProber) Fetch(logger *slog.Logger) error {
 }
 
 func (p *InputProber) Handler(logger *slog.Logger) {
-	p.powerGuage.Set(p.Measures.ActivePower)
+	p.powerGauge.Set(p.Measures.ActivePower)
 
 	if p.Status.Health == "ok" {
-		p.statusGuage.WithLabelValues(p.Status.Operating).Set(1)
+		p.statusGauge.WithLabelValues(p.Status.Operating).Set(1)
 	} else {
-		p.statusGuage.WithLabelValues(p.Status.Operating).Set(0)
+		p.statusGauge.WithLabelValues(p.Status.Operating).Set(0)
 	}
 
 	for _, phase := range p.phases {
-		p.phaseVoltGuage.WithLabelValues(phase.Identification.PhysicalName).Set(phase.Measures.VoltageLL)
-		p.phaseAmpGuage.WithLabelValues(phase.Identification.PhysicalName).Set(phase.Measures.Current)
-		p.phaseLoadGuage.WithLabelValues(phase.Identification.PhysicalName).Set(phase.Measures.PercentLoad)
+		p.phaseVoltGauge.WithLabelValues(phase.Identification.PhysicalName).Set(phase.Measures.VoltageLL)
+		p.phaseAmpGauge.WithLabelValues(phase.Identification.PhysicalName).Set(phase.Measures.Current)
+		p.phaseLoadGauge.WithLabelValues(phase.Identification.PhysicalName).Set(phase.Measures.PercentLoad)
 	}
 }

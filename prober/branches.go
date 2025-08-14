@@ -30,7 +30,7 @@ type Branch struct {
 	Measures struct {
 		Current     float64 `json:"current"`
 		PercentLoad float64 `json:"percentLoad"`
-		Voltage     float64 `json:"voltageLL"`
+		Voltage     float64 `json:"voltage"`
 	} `json:"measures"`
 	Identification struct {
 		PhysicalName string `json:"physicalName"`
@@ -44,49 +44,49 @@ type Branch struct {
 
 type BranchProber struct {
 	branches     []*Branch
-	statusGuage  *prometheus.GaugeVec
-	breakerGuage *prometheus.GaugeVec
-	voltGuage    *prometheus.GaugeVec
-	ampGuage     *prometheus.GaugeVec
-	loadGuage    *prometheus.GaugeVec
+	statusGauge  *prometheus.GaugeVec
+	breakerGauge *prometheus.GaugeVec
+	voltGauge    *prometheus.GaugeVec
+	ampGauge     *prometheus.GaugeVec
+	loadGauge    *prometheus.GaugeVec
 	ec           *client.Client
 }
 
 func (b *BranchProber) Register(registry *prometheus.Registry) {
-	b.statusGuage = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	b.statusGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "eaton_pdu_branch_status",
 		Help: "PDU branch status",
 	}, []string{"branch", "operating"})
 
-	registry.MustRegister(b.statusGuage)
+	registry.MustRegister(b.statusGauge)
 
-	b.loadGuage = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	b.loadGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "eaton_pdu_branch_percent_load",
 		Help: "PDU branch percent load (%)",
 	}, []string{"branch"})
 
-	registry.MustRegister(b.loadGuage)
+	registry.MustRegister(b.loadGauge)
 
-	b.voltGuage = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	b.voltGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "eaton_pdu_branch_voltage",
 		Help: "PDU branch voltage (V)",
 	}, []string{"branch"})
 
-	registry.MustRegister(b.voltGuage)
+	registry.MustRegister(b.voltGauge)
 
-	b.ampGuage = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	b.ampGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "eaton_pdu_branch_current",
 		Help: "PDU branch current (A)",
 	}, []string{"branch"})
 
-	registry.MustRegister(b.ampGuage)
+	registry.MustRegister(b.ampGauge)
 
-	b.breakerGuage = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	b.breakerGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "eaton_pdu_branch_breaker_tripped",
 		Help: "PDU branch breaker tripped",
 	}, []string{"branch"})
 
-	registry.MustRegister(b.breakerGuage)
+	registry.MustRegister(b.breakerGauge)
 }
 
 func (b *BranchProber) Fetch(logger *slog.Logger) error {
@@ -124,18 +124,18 @@ func (b *BranchProber) Fetch(logger *slog.Logger) error {
 func (b *BranchProber) Handler(logger *slog.Logger) {
 
 	for _, branch := range b.branches {
-		b.loadGuage.WithLabelValues(branch.Identification.PhysicalName).Set(branch.Measures.PercentLoad)
-		b.voltGuage.WithLabelValues(branch.Identification.PhysicalName).Set(branch.Measures.Voltage)
-		b.ampGuage.WithLabelValues(branch.Identification.PhysicalName).Set(branch.Measures.Current)
+		b.loadGauge.WithLabelValues(branch.Identification.PhysicalName).Set(branch.Measures.PercentLoad)
+		b.voltGauge.WithLabelValues(branch.Identification.PhysicalName).Set(branch.Measures.Voltage)
+		b.ampGauge.WithLabelValues(branch.Identification.PhysicalName).Set(branch.Measures.Current)
 		if branch.Status.Health == "ok" {
-			b.statusGuage.WithLabelValues(branch.Identification.PhysicalName, branch.Status.Operating).Set(1)
+			b.statusGauge.WithLabelValues(branch.Identification.PhysicalName, branch.Status.Operating).Set(1)
 		} else {
-			b.statusGuage.WithLabelValues(branch.Identification.PhysicalName, branch.Status.Operating).Set(0)
+			b.statusGauge.WithLabelValues(branch.Identification.PhysicalName, branch.Status.Operating).Set(0)
 		}
 		if branch.Status.BreakerTripped {
-			b.breakerGuage.WithLabelValues(branch.Identification.PhysicalName).Set(1)
+			b.breakerGauge.WithLabelValues(branch.Identification.PhysicalName).Set(1)
 		} else {
-			b.breakerGuage.WithLabelValues(branch.Identification.PhysicalName).Set(0)
+			b.breakerGauge.WithLabelValues(branch.Identification.PhysicalName).Set(0)
 		}
 	}
 }

@@ -84,12 +84,12 @@ eaton_pdu_branch_status{branch="C",operating="in service"} 1
 eaton_pdu_branch_status{branch="D",operating="in service"} 1
 eaton_pdu_branch_status{branch="E",operating="in service"} 1
 eaton_pdu_branch_status{branch="F",operating="in service"} 1
-eaton_pdu_branch_voltage{branch="A"} 0
-eaton_pdu_branch_voltage{branch="B"} 0
-eaton_pdu_branch_voltage{branch="C"} 0
-eaton_pdu_branch_voltage{branch="D"} 0
-eaton_pdu_branch_voltage{branch="E"} 0
-eaton_pdu_branch_voltage{branch="F"} 0
+eaton_pdu_branch_voltage{branch="A"} 203.62
+eaton_pdu_branch_voltage{branch="B"} 204.95
+eaton_pdu_branch_voltage{branch="C"} 203.91
+eaton_pdu_branch_voltage{branch="D"} 203.62
+eaton_pdu_branch_voltage{branch="E"} 204.95
+eaton_pdu_branch_voltage{branch="F"} 203.91
 eaton_pdu_input_status{operating="in service"} 1
 eaton_pdu_phase_current{phase="L1"} 22.17
 eaton_pdu_phase_current{phase="L2"} 12.501
