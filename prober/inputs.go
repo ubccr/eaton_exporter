@@ -1,0 +1,160 @@
+// Copyright 2025 Andrew E. Bruno
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package prober
+
+import (
+	"encoding/json"
+	"log/slog"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/ubccr/eaton_exporter/client"
+)
+
+const (
+	InputsEndpoint = client.BasePath + "/powerDistributions/1/inputs/1"
+)
+
+type Phase struct {
+	Measures struct {
+		PercentLoad float64 `json:"percentLoad"`
+		Current     float64 `json:"current"`
+		VoltageLL   float64 `json:"voltageLL"`
+	} `json:"measures"`
+	Identification struct {
+		PhysicalName string `json:"physicalName"`
+	} `json:"Identification"`
+}
+
+type InputProber struct {
+	Measures struct {
+		ActivePower float64 `json:"activePower"`
+	} `json:"measures"`
+	Status struct {
+		Operating string `json:"operating"`
+		Health    string `json:"health"`
+	} `json:"status"`
+	PhaseEndpoint struct {
+		Path string `json:"@id"`
+	} `json:"phases"`
+
+	phases         []*Phase
+	powerGuage     prometheus.Gauge
+	statusGuage    *prometheus.GaugeVec
+	phaseVoltGuage *prometheus.GaugeVec
+	phaseAmpGuage  *prometheus.GaugeVec
+	phaseLoadGuage *prometheus.GaugeVec
+	ec             *client.Client
+}
+
+func (p *InputProber) Register(registry *prometheus.Registry) {
+	p.powerGuage = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "eaton_pdu_active_power",
+		Help: "PDU active power (W)",
+	})
+
+	registry.MustRegister(p.powerGuage)
+
+	p.statusGuage = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "eaton_pdu_input_status",
+		Help: "PDU input status",
+	}, []string{"operating"})
+
+	registry.MustRegister(p.statusGuage)
+
+	p.phaseLoadGuage = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "eaton_pdu_phase_percent_load",
+		Help: "PDU phase percent load (%)",
+	}, []string{"phase"})
+
+	registry.MustRegister(p.phaseLoadGuage)
+
+	p.phaseVoltGuage = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "eaton_pdu_phase_voltage_ll",
+		Help: "PDU phase voltageLL (V)",
+	}, []string{"phase"})
+
+	registry.MustRegister(p.phaseVoltGuage)
+
+	p.phaseAmpGuage = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "eaton_pdu_phase_current",
+		Help: "PDU phase current (A)",
+	}, []string{"phase"})
+
+	registry.MustRegister(p.phaseAmpGuage)
+}
+
+func (p *InputProber) Fetch(logger *slog.Logger) error {
+	rawJson, err := p.ec.FetchEndpoint(InputsEndpoint)
+	if err != nil {
+		return err
+	}
+
+	err = json.Unmarshal(rawJson, p)
+	if err != nil {
+		return err
+	}
+
+	if p.PhaseEndpoint.Path == "" {
+		return nil
+	}
+
+	p.phases = make([]*Phase, 0)
+
+	rawJson, err = p.ec.FetchEndpoint(p.PhaseEndpoint.Path)
+	if err != nil {
+		return err
+	}
+
+	var root client.EndpointRoot
+
+	err = json.Unmarshal(rawJson, &root)
+	if err != nil {
+		return err
+	}
+
+	for _, m := range root.Members {
+		rawJson, err := p.ec.FetchEndpoint(m.ID)
+		if err != nil {
+			return err
+		}
+
+		var phase Phase
+
+		err = json.Unmarshal(rawJson, &phase)
+		if err != nil {
+			return err
+		}
+
+		p.phases = append(p.phases, &phase)
+	}
+
+	return nil
+}
+
+func (p *InputProber) Handler(logger *slog.Logger) {
+	p.powerGuage.Set(p.Measures.ActivePower)
+
+	if p.Status.Health == "ok" {
+		p.statusGuage.WithLabelValues(p.Status.Operating).Set(1)
+	} else {
+		p.statusGuage.WithLabelValues(p.Status.Operating).Set(0)
+	}
+
+	for _, phase := range p.phases {
+		p.phaseVoltGuage.WithLabelValues(phase.Identification.PhysicalName).Set(phase.Measures.VoltageLL)
+		p.phaseAmpGuage.WithLabelValues(phase.Identification.PhysicalName).Set(phase.Measures.Current)
+		p.phaseLoadGuage.WithLabelValues(phase.Identification.PhysicalName).Set(phase.Measures.PercentLoad)
+	}
+}

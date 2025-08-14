@@ -33,8 +33,9 @@ const (
 )
 
 var (
-	configFile    = kingpin.Flag("config.file", "Eaton exporter config file").Default("/etc/prometheus/eaton.conf").String()
-	listenAddress = kingpin.Flag("web.listen-address", "Address to listen on for web interface and telemetry.").Default(":9795").String()
+	configFile     = kingpin.Flag("config.file", "Eaton exporter config file").Default("/etc/prometheus/eaton.conf").String()
+	logLevelProber = kingpin.Flag("log.prober", "Log level for probe request logs. One of: [debug, info, warn, error]. Defaults to debug").Default("debug").String()
+	listenAddress  = kingpin.Flag("web.listen-address", "Address to listen on for web interface and telemetry.").Default(":9795").String()
 )
 
 func main() {
@@ -45,6 +46,10 @@ func main() {
 	kingpin.Parse()
 
 	logger := promslog.New(promslogConfig)
+	probeLogLevel := promslog.NewLevel()
+	if err := probeLogLevel.Set(*logLevelProber); err != nil {
+		logger.Warn("Error setting log prober level, log prober level unchanged", "err", err, "current_level", probeLogLevel.String())
+	}
 
 	logger.Info("Starting eaton_exporter", "version", version.Info())
 	logger.Info("Build context", "build_context", version.BuildContext())

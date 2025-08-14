@@ -15,8 +15,12 @@ var (
 	config *ini.File
 )
 
-type EatonEndpoint interface {
-	GetPath() string
+type Endpoint struct {
+	ID string `json:"@id"`
+}
+
+type EndpointRoot struct {
+	Members []*Endpoint `json:"members"`
 }
 
 type LoginPayload struct {
@@ -31,11 +35,11 @@ type OAuthToken struct {
 	AccessToken string `json:"access_token"`
 }
 
-type Handler struct {
-	endpoints []EatonEndpoint
-	target    string
-	username  string
-	password  string
+type Client struct {
+	target      string
+	username    string
+	password    string
+	accessToken string
 
 	httpClient *http.Client
 }
@@ -50,45 +54,41 @@ func LoadConfig(path string) error {
 	return nil
 }
 
-func GetHandle(target string) (*Handler, error) {
+func New(target string) (*Client, error) {
 	section, err := config.GetSection("connection:" + target)
 	if err != nil {
 		return nil, fmt.Errorf("Connection not found in config: %s", target)
 	}
 
-	h := &Handler{}
+	c := &Client{}
 	k, err := section.GetKey("host")
 	if err != nil {
 		return nil, fmt.Errorf("Connection missing host key: %s", target)
 	}
-	h.target = k.MustString("")
+	c.target = k.MustString("")
 
 	k, err = section.GetKey("username")
 	if err != nil {
 		return nil, fmt.Errorf("Connection missing username key: %s", target)
 	}
-	h.username = k.MustString("")
+	c.username = k.MustString("")
 
 	k, err = section.GetKey("password")
 	if err != nil {
 		return nil, fmt.Errorf("Connection missing password key: %s", target)
 	}
-	h.password = k.MustString("")
+	c.password = k.MustString("")
 
 	tr := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
-	h.httpClient = &http.Client{Transport: tr}
+	c.httpClient = &http.Client{Transport: tr}
 
-	return h, nil
+	return c, nil
 }
 
-func (h *Handler) AddEndpoint(endpoint EatonEndpoint) {
-	h.endpoints = append(h.endpoints, endpoint)
-}
-
-func (h *Handler) authenticate() error {
+func (c *Client) Authenticate() error {
 	payload := &LoginPayload{
-		Username:  h.username,
-		Password:  h.password,
+		Username:  c.username,
+		Password:  c.password,
 		GrantType: "password",
 		Scope:     "GUIAccess",
 	}
@@ -98,13 +98,13 @@ func (h *Handler) authenticate() error {
 		return err
 	}
 
-	req, err := http.NewRequest("POST", fmt.Sprintf("https://%s%s%s", h.target, BasePath, AuthEndpoint), bytes.NewBuffer(b))
+	req, err := http.NewRequest("POST", fmt.Sprintf("https://%s%s%s", c.target, BasePath, AuthEndpoint), bytes.NewBuffer(b))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Accept", "application/json")
 
-	res, err := h.httpClient.Do(req)
+	res, err := c.httpClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -130,29 +130,30 @@ func (h *Handler) authenticate() error {
 		return fmt.Errorf("Failed to obtain access_token")
 	}
 
-	AccessToken = oauthToken.AccessToken
+	c.accessToken = oauthToken.AccessToken
 
 	return nil
 }
 
-func (h *Handler) fetchEndpoint(endpoint EatonEndpoint) error {
-	req, err := http.NewRequest("GET", fmt.Sprintf("https://%s%s%s", h.target, BasePath, endpoint.GetPath()), nil)
+func (c *Client) FetchEndpoint(endpoint string) ([]byte, error) {
+	req, err := http.NewRequest("GET", fmt.Sprintf("https://%s%s", c.target, endpoint), nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	if AccessToken == "" {
-		err = h.authenticate()
+	if c.accessToken == "" {
+		err = c.Authenticate()
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", AccessToken))
-	res, err := h.httpClient.Do(req)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.accessToken))
+
+	res, err := c.httpClient.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer res.Body.Close()
 
@@ -160,40 +161,24 @@ func (h *Handler) fetchEndpoint(endpoint EatonEndpoint) error {
 		res.Body.Close()
 
 		// Try to re-auth
-		err = h.authenticate()
+		err = c.Authenticate()
 		if err != nil {
-			return err
+			return nil, err
 		}
 
-		res, err = h.httpClient.Do(req)
+		res, err = c.httpClient.Do(req)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		defer res.Body.Close()
 	} else if res.StatusCode != 200 {
-		return fmt.Errorf("Eaton restconf api call failed with HTTP status code: %d", res.StatusCode)
+		return nil, fmt.Errorf("Eaton restconf api call failed with HTTP status code: %d endpoint: %s", res.StatusCode, endpoint)
 	}
 
 	rawJson, err := ioutil.ReadAll(res.Body)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	err = json.Unmarshal(rawJson, &endpoint)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (h *Handler) Fetch() error {
-	for _, e := range h.endpoints {
-		err := h.fetchEndpoint(e)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return rawJson, nil
 }

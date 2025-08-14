@@ -1,4 +1,4 @@
-// Copyright 2024 Andrew E. Bruno
+// Copyright 2025 Andrew E. Bruno
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -27,8 +27,8 @@ import (
 )
 
 type Prober interface {
-	GetPath() string
 	Register(*prometheus.Registry)
+	Fetch(*slog.Logger) error
 	Handler(*slog.Logger)
 }
 
@@ -45,15 +45,24 @@ func Handler(w http.ResponseWriter, r *http.Request, logger *slog.Logger, params
 
 	modules := params.Get("module")
 	if modules == "" {
-		modules = "input"
+		modules = "inputs,branches"
+	}
+
+	ec, err := client.New(target)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to create new Eaton rest client for target %q", target), http.StatusBadRequest)
+		logger.Error("Failed to create new Eaton rset client for target", "target", target, "err", err)
+		return
 	}
 
 	probers := make([]Prober, 0)
 
 	for _, moduleName := range strings.Split(modules, ",") {
 		switch moduleName {
-		case "input":
-			probers = append(probers, &InputProber{})
+		case "inputs":
+			probers = append(probers, &InputProber{ec: ec})
+		case "branches":
+			probers = append(probers, &BranchProber{ec: ec})
 		default:
 			http.Error(w, fmt.Sprintf("Unknown module %q", moduleName), http.StatusBadRequest)
 			logger.Debug("Unknown module", "module", moduleName)
@@ -61,24 +70,16 @@ func Handler(w http.ResponseWriter, r *http.Request, logger *slog.Logger, params
 		}
 	}
 
-	handle, err := client.GetHandle(target)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to connect to target %q", target), http.StatusBadRequest)
-		logger.Error("Failed to connect to target", "target", target, "err", err)
-		return
-	}
-
 	registry := prometheus.NewRegistry()
 
 	for _, p := range probers {
 		p.Register(registry)
-		handle.AddEndpoint(p)
-	}
 
-	if err := handle.Fetch(); err != nil {
-		http.Error(w, "Failed to fetch eaton endpoint", http.StatusInternalServerError)
-		logger.Error("Failed to fetch eaton endpoint", "err", err)
-		return
+		if err := p.Fetch(logger); err != nil {
+			http.Error(w, "Failed to fetch eaton endpoint", http.StatusInternalServerError)
+			logger.Error("Failed to fetch eaton endpoint", "err", err)
+			return
+		}
 	}
 
 	for _, p := range probers {
