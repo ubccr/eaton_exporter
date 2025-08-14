@@ -51,7 +51,7 @@ password=admin
   - source_labels: [module]
     target_label: __param_module
   - target_label: __address__
-    replacement: 127.0.0.1:9465
+    replacement: 127.0.0.1:9795
 ```
 
 Example systemd unit file [here](systemd/eaton_exporter.service)
