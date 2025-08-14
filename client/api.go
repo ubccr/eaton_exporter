@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"time"
 
 	"gopkg.in/ini.v1"
 )
@@ -55,19 +56,22 @@ func LoadConfig(path string) error {
 }
 
 func New(target string) (*Client, error) {
+	c := &Client{target: target}
+
 	section, err := config.GetSection("connection:" + target)
-	if err != nil {
-		return nil, fmt.Errorf("Connection not found in config: %s", target)
+	if err == nil {
+		k, err := section.GetKey("host")
+		if err == nil {
+			c.target = k.MustString("")
+		}
+	} else {
+		section, err = config.GetSection("global")
+		if err != nil {
+			return nil, fmt.Errorf("Connection not found in config: %s", target)
+		}
 	}
 
-	c := &Client{}
-	k, err := section.GetKey("host")
-	if err != nil {
-		return nil, fmt.Errorf("Connection missing host key: %s", target)
-	}
-	c.target = k.MustString("")
-
-	k, err = section.GetKey("username")
+	k, err := section.GetKey("username")
 	if err != nil {
 		return nil, fmt.Errorf("Connection missing username key: %s", target)
 	}
@@ -79,8 +83,12 @@ func New(target string) (*Client, error) {
 	}
 	c.password = k.MustString("")
 
-	tr := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
-	c.httpClient = &http.Client{Transport: tr}
+	c.httpClient = &http.Client{
+		Timeout: 15 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+	}
 
 	return c, nil
 }
